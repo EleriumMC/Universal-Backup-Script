@@ -236,7 +236,7 @@ Cleanup() {
     log INFO "Cleaning up files older than $retention days."
     find $mountloc$(hostname) -mtime +3 -exec ls -lah {} \; >> $logloc/backuplog-$date.txt
     find $mountloc$(hostname) -mtime +3 -exec rm -rf {} \; >> $logloc/backuplog-$date.txt
-    find $mountloc$(hostmame) -empty -type d -delete >> $logloc/backuplog-$date.txt
+    find $mountloc$(hostname) -empty -type d -delete >> $logloc/backuplog-$date.txt
 }
 logExport() {
     log INFO "Backups Completed in $timetaken minutes for $(hostname)"
