@@ -10,11 +10,11 @@ datetime=$(date +'%m-%d-%Y')
 datemin=$(date +'%H:%M-%m') 
 #Discord Alert Variables
 #The webhook URL
-webhook="https://discord.com/api/webhooks/1006423427390906430/VJpg-aK5dXUEfm82Ui7t652V52vtQfrM0JtPjNpTgH5r-dnCsHqcH-_qsJPREaWvU_qc"
+webhook=""
 #The avatar the webhook should use
-avat="https://cdn-icons-png.flaticon.com/512/1803/1803613.png"
+avat=""
 #The username of the webhook
-usern="System86.net Backup Util"
+usern="Backup script"
 #----------------------------------#
 declare -a sources=("/etc/pterodactyl/" "/root/" "/var/lib/pterodactyl/volumes/")
 #----------------------------------#
@@ -23,7 +23,7 @@ logloc="/var/log/backups"
 mountloc="/mnt/nfs/"
 retention="3"
 #NFS Mount Variables
-mountcommand="mount -v -t nfs 10.66.66.3:/mnt/media/NX01 /mnt/nfs -o fsc"
+mountcommand="mount -v -t nfs 10.66.66.66:/mnt/media/NX01 /mnt/nfs -o fsc"
 #----------------------------------#
 #Declare Dependencies 
 declare -a packs=("ncdu" "bc" "pigz" "jq" "git")
@@ -183,19 +183,28 @@ pteroBackup() {
 mysqlBackup() {
 cd $backpath
 log INFO "Starting MySQL Backup"
-mysql -u root -p -e 'SELECT table_schema AS "Database", SUM(data_length + index_length) / 1024 / 1024 AS "Size (MB)" FROM information_schema.TABLES GROUP BY table_schema;' | sort -nk2 | grep -v "(MB)" | awk {'print $1'} | while read dbname; do 
+mysql -u root -p -e 'SELECT table_schema AS "Database", SUM(data_length + index_length) / 1024 / 1024 AS "Size (MB)" FROM information_schema.TABLES GROUP BY table_schema;' | sort -nk2 | grep -v "(MB)" | awk {'print $1'} | while read dbname; do
 log INFO "Dumping $dbname to file"
-desc="**Starting MySQL Dump**" && fieldname="Database:;$dbname"
+currsize=$(du -sh "/var/lib/mysql/$dbname" | cut -f1)
+desc="**MySQL Dump**" && fieldname="Database:;$dbname"
+fieldname2="Size:;$currsize" && setcolor="0xF2E409"
 discordlog
 mysqldump --skip-lock-tables "$dbname" > "$dbname.sql"
 tar cf - "$dbname.sql" | pigz -9 -p 2 > "$backpath/$dbname-sql.tar.gz"
 compresssize=$(du -sh "$dbname-sql.tar.gz" | cut -f1)
-desc="**Finished MySQL Backup**" && fieldname="Server:;$dbname"
+desc="**Finished MySQL Backup**" && fieldname="Database:;$dbname"
 fieldname2="Compressed Size:;$compresssize" && setcolor="0x01B031"
+discordlog
 log INFO "Compression Finished for $dbname $compresssize"
 rm -rf "$dbname.sql"
+#Avoid rate limit from discord
+sleep 2  
 done
+log INFO "MySQL backup complete"
 }
+
+
+
 Backup() {
     ts=$(date +%s)
     for runningbackup in "${sources[@]}"; do
