@@ -1,7 +1,7 @@
 #!/bin/bash
 #RCART.CC Universal Backup Script
-#Version: 1.0
-#Latest Update: 4-7-22
+#Version: 1.2
+#Latest Update: 11/24/22
 #----------------------------------#
 #Let's Define Some Variables
 #----------------------------------#
@@ -12,21 +12,22 @@ datemin=$(date +'%H:%M-%m')
 #The webhook URL
 webhook=""
 #The avatar the webhook should use
-avat=""
+avat="https://i.rcart.cc/i/R.png"
 #The username of the webhook
-usern="Backup script"
+usern="Universal Backups"
+discordusername=""
 #----------------------------------#
-declare -a sources=("/etc/pterodactyl/" "/root/" "/var/lib/pterodactyl/volumes/")
+declare -a sources=("/opt/" "/root/" "/var/www/" "/etc/nginx/" "/root/")
 #----------------------------------#
 #Backup Location Variables
 logloc="/var/log/backups"
-mountloc="/mnt/nfs/"
+mountloc="/media/backups/"
 retention="3"
 #NFS Mount Variables
-mountcommand="mount -v -t nfs 10.66.66.66:/mnt/media/NX01 /mnt/nfs -o fsc"
+mountcommand="mount -v -t nfs 0.0.0.0:/example /media -o hard,noexec,nfsvers=4.2,wsize=131072,rsize=131072,timeo=60,retrans=5"
 #----------------------------------#
 #Declare Dependencies 
-declare -a packs=("ncdu" "bc" "pigz" "jq" "git")
+declare -a packs=("bc" "pigz" "jq" "git")
 #----------------------------------#
 #Time to run
 initlog() {
@@ -46,6 +47,7 @@ log () {
     if [[ $LOG_LEVEL -eq "ERROR" ]] || $VERBOSE
     then
     echo [$datetime] [$datemin] $(hostname) $(ps aux | awk {'print $2,$11'}  | grep $$) ${LOG_LEVEL} ${MSG} >> $logloc/backuplog-$date.txt
+    discordLogVerbose
     fi
  }
 pmc() {
@@ -99,33 +101,62 @@ discordlog() {
 bash /root/scripts/discord.sh/discord.sh --webhook-url="$webhook" \
  --username "$usern" \
  --avatar "$avat" \
- --title "$(hostname)" \
+ --title "Host: $(hostname)" \
  --description "$desc" \
  --field "$fieldname $field1" \
  --field "$fieldname2 $field2" \
  --color "$setcolor" \
  --timestamp
 }
+discordlogalert() {
+bash /root/scripts/discord.sh/discord.sh --webhook-url="$webhook" \
+ --username "$usern" \
+ --avatar "$avat" \
+ --title "$(hostname)" \
+ --text "$textoutput" \
+ --description "$desc" \
+ --field "$fieldname $field1" \
+ --color "$setcolor" \
+ --timestamp
+ }
 discordfilesend() {
   bash /root/scripts/discord.sh/discord.sh --webhook-url="$webhook" \
   --username "$usern" \
   --avatar "$avat" \
   --file "$discordfile"
  }
+discordLogVerbose() {
+    if [ "$LOG_LEVEL" = "ERROR" ];
+    then
+    desc="**Level: Error**" && fieldname="Issue;$MSG"
+    textoutput="$discordusername"
+    setcolor="0xF30808"
+    discordlogalert
+    logExport
+    exit
+    fi
+    if [ "$LOG_LEVEL" = "NOTICE" ];
+    then
+    desc="**Level: Notice**" && fieldname="Issue;$MSG"
+    textoutput=""
+    setcolor="0x08C5F3"
+    discordlogalert
+    fi
+
+}
 mountNFS () {
     if [ -f $mountloc/nfs.txt ]; then
     echo "NFS server is mounted but unable to write."
     log ERROR "NFS server has been detected as mounted but is unable to write. Please check permissions."
+    exit
     else
     echo "NFS server may not be mounted, attempting to remount."
     log NOTICE "NFS server may not be mounted, attempting to remount."
-    log INFO "Unmounting NFS server" && umount -f /mnt/nfs
-    $mountcommand && chkmount || log ERROR "NFS server could not be remounted! Manual intervention required!"
-    echo "NFS server could not be remounted! Manual intervention required!"
-    exit
+    #log INFO "Unmounting NFS server" && umount -f $mountloc
+    $mountcommand && sleep 5 && sendtoNFS || log ERROR "NFS server could not be remounted! Manual intervention required!"
     fi
 }
-chkmount () {
+sendtoNFS () {
     if [ -f $mountloc/nfs.txt ]; then
     echo $date > $mountloc/nfs.txt
     fi
@@ -134,8 +165,6 @@ chkmount () {
     export nfsStatus="mounted"
     log INFO "NFS has been detected as mounted." 
     else
-    log ERROR "NFS is either not mounted or is unable to read/write. Please investigate!"
-    echo "NFS has been detected as ummounted!"
     mountNFS
     fi
 }
@@ -203,8 +232,6 @@ done
 log INFO "MySQL backup complete"
 }
 
-
-
 Backup() {
     ts=$(date +%s)
     for runningbackup in "${sources[@]}"; do
@@ -253,10 +280,10 @@ initlog
 pmc
 loadpacks
 echo "==============================="
-chkmount
+sendtoNFS
 createFolder
 Backup
-mysqlBackup
+#mysqlBackup
 Cleanup
 logExport
 echo "Completed"
